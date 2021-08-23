@@ -6,7 +6,7 @@
 
 ## Overview
 
-This document will help you to get started with using the Self-Service Events API and a NodeJS client.
+This document will help you to get started with using the Self-Service Events API and a Go client.
 
 You can use the Self-Service Events API to:
 
