@@ -97,7 +97,7 @@ func connect() {
 	dialer := websocket.DefaultDialer
 
 	// uncomment the following to trust all certificates
-	dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	//dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	c, _, err := dialer.Dial(url, headers)
 
