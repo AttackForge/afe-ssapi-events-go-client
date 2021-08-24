@@ -95,7 +95,7 @@ Your client is now working and you will see new events output to the terminal as
 pushed from AttackForge.
 
 You can now work on your integration code to start actioning these events.
-Open index.js with a text editor - the file is located in your client directory.
+Open main.go with a text editor - the file is located in your client directory.
 Your code will replace the following section within this file:
 
 	/* ENTER YOUR INTEGRATION CODE HERE */
