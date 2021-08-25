@@ -234,8 +234,8 @@ func loadReplayTimestamp() string {
 			fmt.Println(err)
 		} else {
 			if n == 24 {
-				fmt.Println("Loaded replay timestamp from storage:", timestamp)
 				timestamp = string(data)
+				fmt.Println("Loaded replay timestamp from storage:", timestamp)
 			} else {
 				fmt.Println("Invalid timestamp stored in \".replay_timestamp\"")
 			}
