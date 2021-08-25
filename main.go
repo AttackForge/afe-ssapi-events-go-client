@@ -42,6 +42,7 @@ type PendingRequest struct {
 	timeout *time.Timer
 }
 
+var connected bool = false
 var heartbeatTimer *time.Timer
 var pendingRequests map[string]PendingRequest
 
@@ -57,65 +58,69 @@ func notification(method string, params map[string]interface{}) {
 }
 
 func connect() {
-	pendingRequests = make(map[string]PendingRequest)
+	if !connected {
+		pendingRequests = make(map[string]PendingRequest)
 
-	hostname, found := os.LookupEnv("HOSTNAME")
+		hostname, found := os.LookupEnv("HOSTNAME")
 
-	if !found {
-		fmt.Println("Environment variable HOSTNAME is undefined")
-		action <- EXIT
-		return
-	}
-
-	_, found = os.LookupEnv("EVENTS")
-
-	if !found {
-		fmt.Println("Environment variable EVENTS is undefined")
-		action <- EXIT
-		return
-	}
-
-	apiKey, found := os.LookupEnv("X_SSAPI_KEY")
-
-	if !found {
-		fmt.Println("Environment variable X_SSAPI_KEY is undefined")
-		action <- EXIT
-		return
-	}
-
-	port, found := os.LookupEnv("PORT")
-
-	if !found {
-		port = "443"
-	}
-
-	url := fmt.Sprintf("wss://%s:%s/api/ss/events", hostname, port)
-
-	headers := make(http.Header)
-	headers.Add("X-SSAPI-KEY", apiKey)
-
-	dialer := websocket.DefaultDialer
-
-	// uncomment the following to trust all certificates
-	//dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
-	c, _, err := dialer.Dial(url, headers)
-
-	if err != nil {
-		fmt.Println(err)
-
-		if c != nil {
-			c.Close()
+		if !found {
+			fmt.Println("Environment variable HOSTNAME is undefined")
+			action <- EXIT
+			return
 		}
 
-		action <- RECONNECT
-		return
+		_, found = os.LookupEnv("EVENTS")
+
+		if !found {
+			fmt.Println("Environment variable EVENTS is undefined")
+			action <- EXIT
+			return
+		}
+
+		apiKey, found := os.LookupEnv("X_SSAPI_KEY")
+
+		if !found {
+			fmt.Println("Environment variable X_SSAPI_KEY is undefined")
+			action <- EXIT
+			return
+		}
+
+		port, found := os.LookupEnv("PORT")
+
+		if !found {
+			port = "443"
+		}
+
+		url := fmt.Sprintf("wss://%s:%s/api/ss/events", hostname, port)
+
+		headers := make(http.Header)
+		headers.Add("X-SSAPI-KEY", apiKey)
+
+		dialer := websocket.DefaultDialer
+
+		// uncomment the following to trust all certificates
+		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
+		c, _, err := dialer.Dial(url, headers)
+
+		if err != nil {
+			fmt.Println(err)
+
+			if c != nil {
+				c.Close()
+			}
+
+			action <- RECONNECT
+			return
+		}
+
+		connected = true
+
+		heartbeat(c)
+		subscribe(c)
+
+		go listen(c)
 	}
-
-	heartbeat(c)
-	subscribe(c)
-
-	go listen(c)
 }
 
 func listen(c *websocket.Conn) {
@@ -126,8 +131,6 @@ func listen(c *websocket.Conn) {
 
 		if err != nil {
 			fmt.Println(err)
-			action <- RECONNECT
-
 			break
 		}
 
@@ -192,6 +195,9 @@ func listen(c *websocket.Conn) {
 			}
 		}
 	}
+
+	connected = false
+	action <- RECONNECT
 }
 
 func heartbeat(c *websocket.Conn) {
