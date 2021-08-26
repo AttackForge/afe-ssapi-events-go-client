@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	CONNECT   = iota
 	RECONNECT = iota
 	EXIT      = iota
 )
@@ -42,7 +41,6 @@ type PendingRequest struct {
 	timeout *time.Timer
 }
 
-var connected bool = false
 var heartbeatTimer *time.Timer
 var pendingRequests map[string]PendingRequest
 
@@ -58,74 +56,72 @@ func notification(method string, params map[string]interface{}) {
 }
 
 func connect() {
-	if !connected {
-		pendingRequests = make(map[string]PendingRequest)
-
-		hostname, found := os.LookupEnv("HOSTNAME")
-
-		if !found {
-			fmt.Println("Environment variable HOSTNAME is undefined")
-			action <- EXIT
-			return
-		}
-
-		_, found = os.LookupEnv("EVENTS")
-
-		if !found {
-			fmt.Println("Environment variable EVENTS is undefined")
-			action <- EXIT
-			return
-		}
-
-		apiKey, found := os.LookupEnv("X_SSAPI_KEY")
-
-		if !found {
-			fmt.Println("Environment variable X_SSAPI_KEY is undefined")
-			action <- EXIT
-			return
-		}
-
-		port, found := os.LookupEnv("PORT")
-
-		if !found {
-			port = "443"
-		}
-
-		url := fmt.Sprintf("wss://%s:%s/api/ss/events", hostname, port)
-
-		headers := make(http.Header)
-		headers.Add("X-SSAPI-KEY", apiKey)
-
-		dialer := websocket.DefaultDialer
-
-		// uncomment the following to trust all certificates
-		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
-		c, _, err := dialer.Dial(url, headers)
-
-		if err != nil {
-			fmt.Println(err)
-
-			if c != nil {
-				c.Close()
-			}
-
-			action <- RECONNECT
-			return
-		}
-
-		connected = true
-
-		heartbeat(c)
-		subscribe(c)
-
-		go listen(c)
+	if heartbeatTimer != nil {
+		heartbeatTimer.Stop()
 	}
+
+	pendingRequests = make(map[string]PendingRequest)
+
+	hostname, found := os.LookupEnv("HOSTNAME")
+
+	if !found {
+		fmt.Println("Environment variable HOSTNAME is undefined")
+		action <- EXIT
+		return
+	}
+
+	_, found = os.LookupEnv("EVENTS")
+
+	if !found {
+		fmt.Println("Environment variable EVENTS is undefined")
+		action <- EXIT
+		return
+	}
+
+	apiKey, found := os.LookupEnv("X_SSAPI_KEY")
+
+	if !found {
+		fmt.Println("Environment variable X_SSAPI_KEY is undefined")
+		action <- EXIT
+		return
+	}
+
+	port, found := os.LookupEnv("PORT")
+
+	if !found {
+		port = "443"
+	}
+
+	url := fmt.Sprintf("wss://%s:%s/api/ss/events", hostname, port)
+
+	headers := make(http.Header)
+	headers.Add("X-SSAPI-KEY", apiKey)
+
+	dialer := websocket.DefaultDialer
+
+	// uncomment the following to trust all certificates
+	dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
+	c, _, err := dialer.Dial(url, headers)
+
+	if err != nil {
+		fmt.Println(err)
+
+		if c != nil {
+			c.Close()
+		}
+
+		action <- RECONNECT
+		return
+	}
+
+	heartbeat(c)
+	subscribe(c)
+
+	go listen(c)
 }
 
 func listen(c *websocket.Conn) {
-	defer c.Close()
-
 	for {
 		_, data, err := c.ReadMessage()
 
@@ -196,7 +192,7 @@ func listen(c *websocket.Conn) {
 		}
 	}
 
-	connected = false
+	c.Close()
 	action <- RECONNECT
 }
 
@@ -311,23 +307,25 @@ func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	action <- CONNECT
+	connect()
 
 	for {
 		select {
 		case code := <-action:
-			if code == CONNECT {
-				connect()
-			} else if code == RECONNECT {
+			if code == RECONNECT {
+				if heartbeatTimer != nil {
+					heartbeatTimer.Stop()
+				}
+
 				time.AfterFunc(time.Second, func() {
-					action <- CONNECT
+					connect()
 				})
 			} else if code == EXIT {
 				os.Exit(0)
 			}
 
 		case <-interrupt:
-			action <- EXIT
+			os.Exit(0)
 		}
 	}
 }
